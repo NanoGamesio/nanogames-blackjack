@@ -91,35 +91,49 @@
       bottom: 0;
     }
     .script_box{
-      width: 600px; height: 600px; float: left; overflow-y: hidden;
     }
     .script_box>code{
       height: 100%;
       box-sizing: border-box;
     }
     #form{
-      margin-left: 600px; padding-top: 200px;
+      margin: 80px auto;
     }
     #cards{
       clear: both;
     }
+    #public_key{
+    }
   </style>
 </head>
 <body>
-  <pre class="script_box"><code id="script_clone" class="javascript"></code></pre>
   <div id="form">
     <div class="form-item tc">
       <h3>NanoGames Blackjack Verify</h3>
     </div>
     <div class="form-item tc">
-      <input id="begin" type="text" placeholder="Begin Hash">
+      <input id="signature" type="text" placeholder="Signature">
+      <input id="issus" style="width: 60px;" type="text" placeholder="Issus">
     </div>
     <div class="form-item tc">
       <button id="button">Verify</button>
     </div>
   </div>
   <div id="cards" class="form-item"></div>
-  <script id="script">
+  <h2>Card generation algorithm</h2>
+  <pre class="script_box"><code id="card_script_clone" class="javascript"></code></pre>
+  <script>
+    let signature, issus, range, search = decodeURIComponent(window.location.search);
+    signature = search.match(/[\?|&]s=([^&]+)/);
+    signature = signature ? signature[1] : "";
+    issus = search.match(/[\?|&]i=([^&]+)/);
+    issus = issus ? issus[1] : "";
+    range = search.match(/[\?|&]range=([^&]+)/);
+    range = range
+      ?range[1].split(",").map(function(item){return parseInt(item);})
+      :null;
+  </script>
+  <script id="card_script">
     (function(){
       const CARDS = " ,A,2,3,4,5,6,7,8,9,10,J,Q,K".split(",");
       const FLOWER = ["♠", "♥", "♣", "♦"];
@@ -145,7 +159,7 @@
       }
 
       function create (hash, times) {
-        times = times || 16;
+        times = times || 12;
         let cards = [];
         let hashList = [];
         createCards(hash, times, cards, hashList);
@@ -177,11 +191,12 @@
       }
 
       let $button = document.getElementById("button");
-      let $begin = document.getElementById("begin");
+      let $signature = document.getElementById("signature");
+      let $issus = document.getElementById("issus");
       let $cards = document.getElementById("cards");
 
-      function handleClick () {
-        let beginHash = $begin.value;
+      function generate () {
+        let beginHash = String(CryptoJS.SHA256($signature.value));
         let list = create(beginHash);
 
         let cardsfram = list.map(function (item, index) {
@@ -191,29 +206,47 @@
       }
 
       $button.addEventListener("click", function(){
-        range = null;
-        handleClick();
+        let query = '?s=' + $signature.value + '&i=' + $issus.value;
+        location.replace(location.href.replace(/\?*.*$/, query));
       }, false)
 
-      let baseHash, range, search = decodeURIComponent(window.location.search);
-      baseHash = search.match(/[\?|&]hash=([^&]+)/);
-      baseHash = baseHash ? baseHash[1] : "";
-      range = search.match(/[\?|&]range=([^&]+)/);
-      range = range
-        ?range[1].split(",").map(function(item){return parseInt(item);})
-        :null;
+      if (signature) {
+        $signature.value = signature;
+        generate();
+      }
 
-      if (baseHash) {
-        $begin.value = baseHash;
-        handleClick();
+      if (issus) {
+        $issus.value = issus;
       }
 
     })();
   </script>
+  <h2>Signature verification</h2>
+  <pre class="script_box"><code id="seed_verify" class="bash">
+#!/bin/bash
+# Defining variables
+bj_issus='1'
+bj_slat='0000000000000000000c50134a09aa6f896234922c50e44f5eb8609604e6ef59'
+bj_signature='zXkrgsio9iqZOpgJ46US/3lUnlNVL7TNYoWo4Rn1XuG0b2KKse8IvFRrtW+VdKF9D97/SV3+vmQm6hFGoDjEYZOvHrsB83KOgzxo9Rb6lZ7r2lI9+jnPb4wIKsiRnRvAPcwyoTjwQZGxTFXG785JikvHgdhyKu9Y94HT/cBSN2I='
+# Save public key
+echo '-----BEGIN PUBLIC KEY-----
+MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDelMKE7rVsdORXc+OTcz0yauuc
+PECQ6Pus5oy6IG8XvuSmKqzYkjvadzCjH3DzY6U2s0/KzSuj4bmpBRagKO+DCw3N
+xJy0AurtG8TDuHdtKZtp6l1+m71D+tkihMZp1l+4VBFRUE8hXR36x9K2xF/NDd0e
+DekpKSmtXdoQ7jsnJQIDAQAB
+-----END PUBLIC KEY-----' > pub.pem
+# Save signature
+base64 --decode <<<$bj_signature > signature.sign
+# HMAC slat and verify
+echo -n $bj_issus | openssl dgst -sha256 -hmac $bj_slat -binary | openssl dgst -sha256 -verify pub.pem -signature signature.sign
+  </code></pre>
   <script>
     (function(){
-      let clone = document.getElementById("script_clone");
-      let script = document.getElementById("script");
+      let clone = document.getElementById("card_script_clone");
+      let script = document.getElementById("card_script");
+      let seed_verify = document.getElementById("seed_verify");
+      seed_verify.innerHTML = seed_verify.innerHTML.replace(/issus\=\'[^']+\'/, "issus='"+issus+"'")
+        .replace(/signature\=\'[^']+\'/, "signature='"+signature+"'");
       // hljs.highlightBlock(clone.children[0]);
       clone.innerText = script.innerText;
       hljs.initHighlightingOnLoad();
